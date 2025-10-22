@@ -4,10 +4,10 @@
 #include <math.h>
 #include <unistd.h>
 
-#define AIR_MULT   0.3
+#define AIR_MULT   0.01
 // #define WATER_MULT 1.0
-#define LAND_MULT  0.01
-#define DECAY      0.1
+#define LAND_MULT  0.005
+#define DECAY      0.8
 
 #define MIN(a,b) (a<b?a:b)
 #define MAX(a,b) (a>b?a:b)
@@ -50,15 +50,15 @@ typedef struct {
 
 bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
     tile_t my = map->tiles[row][col];
-    float wind_x = acos(map->wind.direction)*map->wind.speed,
-          wind_y = asin(map->wind.direction)*map->wind.speed;
+    float wind_r = (float) row - asin(map->wind.direction)*map->wind.speed,
+          wind_c = (float) col - acos(map->wind.direction)*map->wind.speed;
     float total = DECAY*(*in)[row][col];
     for(int ri = MAX(0,row-1); ri < MIN(ROWS-1, row+1); ri++) {
         for(int ci = MAX(0,col-1); ci < MIN(COLS-1, col+1); ci++) {
             tile_t their = map->tiles[ri][ci];
             total += AIR_MULT
-                   * sqrtf(powf(row-ri-wind_y,2)+powf(col-ci-wind_x,2))
-                   * fabsf(their.elevation - my.elevation)
+                   * sqrtf(powf(ri-wind_r,2)+powf(ci-wind_c,2))
+                   * fabsf(their.elevation / my.elevation)
                    * (*in)[ri][ci];
             total += LAND_MULT*(*in)[ri][ci];
             // total += AIR_MULT * in[ri][ci]->air_contaminant * my.elevation / their.elevation;
@@ -78,7 +78,26 @@ void print_grid(grid_t *a) {
     printf("\033[H\033[3J");
     for(int r = 0; r < ROWS; r+=2) {
         for(int c = 0; c < COLS; c++) {
-            printf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀", ((*a)[r][c]>255)*255, CLAMP((int)(*a)[r][c]*10,0,255), 0, ((*a)[r+1][c]>255)*255, CLAMP((int)(*a)[r+1][c]*10, 0, 255), 0);
+            printf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀",
+                ((*a)[r][c]>255   || (*a)[r][c]<0)*255,   CLAMP((int)(*a)[r][c]*10,0,255),     0,
+                ((*a)[r+1][c]>255 || (*a)[r+1][c]<0)*255, CLAMP((int)(*a)[r+1][c]*10, 0, 255), 0
+            );
+            // printf("%.2f\t", (*a)[r][c]);
+        }
+        printf("\033[0m\n");
+    }
+}
+
+void print_map(map_t m) {
+    // printf("=========\n");
+    // printf("\033[H\033[3J");
+    printf("Wind:\n\tSpeed: %f\n\tDirection: %f\n", m.wind.speed, m.wind.direction);
+    for(int r = 0; r < ROWS; r+=2) {
+        for(int c = 0; c < COLS; c++) {
+            printf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀",
+                (int)(m.tiles[r][c].elevation*255),   0,     0,
+                (int)(m.tiles[r+1][c].elevation*255), 0,     0
+            );
             // printf("%.2f\t", (*a)[r][c]);
         }
         printf("\033[0m\n");
@@ -96,22 +115,31 @@ int main(void) {
     bool parity = 1;
 
     map_t map;
+    map.wind.direction = 0.8;
+    map.wind.speed     = 0.1;
     for(int r = 0; r < ROWS; r++) {
         for(int c = 0; c < COLS; c++) {
+            float e = 0.25 * cos(0.1 * (30-c)) + 0.25 * cos(0.5 * r) + 0.5;
+            if(e < 0 || e > 1)
+                printf("Bad value at %d,%d (%f)\n", c, r, e);
             map.tiles[r][c] = (tile_t){
-                .elevation = 1.25*cos(0.8*(float)r)+1.25*cos(0.3*(float)c),
+                // .elevation = 1.25*cos(0.8*(float)r)+1.25*cos(0.3*(float)c),
+                .elevation = e,
                 .type = E_TILE_GROUND,
             };
         }
     }
 
-    a[1][1] = 100.0;
+    // print_map(map);
+    // return 0;
+
+    a[0][0] = 100.0;
 
     int gen = 0;
     bool done = 0;
     while(!done) {
         map.wind.direction = 0.8;
-        map.wind.speed     = 0.1;
+        map.wind.speed     = 6.28/360 * 270;
         done = 1;
         #pragma omp parallel for num_threads(8)
         for(int i = 0; i < GRID_SIZE; i++) {
@@ -122,7 +150,7 @@ int main(void) {
             }
         }
 
-        usleep(150000);
+        usleep(15000);
         print_grid(parity?&a:&b);
         printf("\033[KGeneration: %d\n", gen++);
         parity = !parity;
