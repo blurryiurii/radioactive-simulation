@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <math.h>
 #include <unistd.h>
+#include <time.h>
 
 #define AIR_MULT   0.009
 // #define WATER_MULT 1.0
@@ -111,6 +112,8 @@ void print_map(map_t m) {
 }
 
 int main(int argc, char** argv) {
+    srand(time(0));
+
     grid_t a,b;
     for(int r = 0; r < ROWS; r++) {
         for(int c = 0; c < COLS; c++) {
@@ -148,12 +151,13 @@ int main(int argc, char** argv) {
         map.wind.direction = 0.1;
         map.wind.speed     = 6.28/360 * 90;
         done = 1;
-        // #pragma omp parallel for num_threads(8)
-        for(int i = 0; i < GRID_SIZE; i++) {
+        #pragma omp parallel for num_threads(8)
+        for(int i = 0; i < 16384; i++) {
+            int pos = rand() % GRID_SIZE;
             if(parity){
-                done &= step_cell(&a, &b, I2RC(i), &map);
+                done &= step_cell(&a, &b, I2RC(pos), &map);
             } else {
-                done &= step_cell(&b, &a, I2RC(i), &map);
+                done &= step_cell(&b, &a, I2RC(pos), &map);
             }
         }
 
