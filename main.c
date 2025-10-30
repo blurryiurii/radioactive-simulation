@@ -10,7 +10,9 @@ double AIR_MULT = 0.0;
 double LAND_MULT = 0.0;
 // #define AIR_MULT   0.019
 // #define LAND_MULT  0.002
-#define DECAY      0.7
+// #define WATER_MULT 1.0
+#define DECAY      0.86
+#define LAND_SLOPE_GAIN 6.0
 
 #define MIN(a,b) (a<b?a:b)
 #define MAX(a,b) (a>b?a:b)
@@ -53,8 +55,8 @@ typedef struct {
 
 bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
     tile_t my = map->tiles[row][col];
-    float wind_r = (float) row - asin(map->wind.direction)*map->wind.speed,
-          wind_c = (float) col - acos(map->wind.direction)*map->wind.speed;
+    float wind_r = (float) row - sinf(map->wind.direction)*map->wind.speed,
+          wind_c = (float) col - cosf(map->wind.direction)*map->wind.speed;
     float total = DECAY * (*in)[row][col];
     for(int ri = MAX(0,row-1); ri < MIN(ROWS, row+2); ri++) {
         for(int ci = MAX(0,col-1); ci < MIN(COLS, col+2); ci++) {
@@ -63,7 +65,11 @@ bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
                    * sqrtf(powf(ri-wind_r,2)+powf(ci-wind_c,2))
                    * fabsf(their.elevation / my.elevation)
                    * (*in)[ri][ci];
-            total += LAND_MULT*(*in)[ri][ci];
+
+            float slope = their.elevation - my.elevation; // >0 means their higher
+            float downhill = fmaxf(0.0f, slope); //boost when downhill only
+            float slope_weight = 1.0 * LAND_SLOPE_GAIN * downhill;
+            total += LAND_MULT * slope_weight * (*in)[ri][ci];
             // total += AIR_MULT * in[ri][ci]->air_contaminant * my.elevation / their.elevation;
             // total += LAND_MULT * in[ri][ci]->land_contaminant;
             // if(my.type == E_TILE_WATER && their.type == E_TILE_WATER)
@@ -160,11 +166,13 @@ int main(int argc, char** argv) {
     // }
 
     a[ROWS/2][COLS/2] = 100.0;
+    a[ROWS-1][(int)(COLS*0.75)] = 100.0;
 
     int gen = 0;
     bool done = 0;
+    float windDirs[4] = {0.0, 1.57, 3.14, 4.71};
+    map.wind.direction = (rand() / (float)RAND_MAX) * (6.28);
     while(!done && (gen <= 0 || gen < GENERATIONS)) {
-        map.wind.direction = 0.1;
         map.wind.speed     = 6.28/360 * 90;
         done = 1;
         if(parity)
