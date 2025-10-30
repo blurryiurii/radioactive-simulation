@@ -144,11 +144,13 @@ int main(int argc, char** argv) {
     }
 
     a[ROWS/2][COLS/2] = 100.0;
+    a[ROWS-1][(int)(COLS*0.75)] = 100.0;
 
     int gen = 0;
     bool done = 0;
+    float windDirs[4] = {0.0, 1.57, 3.14, 4.71};
+    map.wind.direction = (rand() / (float)RAND_MAX) * (6.28);
     while(!done) {
-        map.wind.direction = 1.57;
         map.wind.speed     = 6.28/360 * 90;
         done = 1;
         #pragma omp parallel for num_threads(8)
