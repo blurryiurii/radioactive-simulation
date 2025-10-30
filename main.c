@@ -4,11 +4,13 @@
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
+#include <string.h>
 
-#define AIR_MULT   0.009
-// #define WATER_MULT 1.0
-#define LAND_MULT  0.002
-#define DECAY      0.8
+double AIR_MULT = 0.0;
+double LAND_MULT = 0.0;
+// #define AIR_MULT   0.019
+// #define LAND_MULT  0.002
+#define DECAY      0.7
 
 #define MIN(a,b) (a<b?a:b)
 #define MAX(a,b) (a>b?a:b)
@@ -59,7 +61,7 @@ bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
             tile_t their = map->tiles[ri][ci];
             total += AIR_MULT
                    * sqrtf(powf(ri-wind_r,2)+powf(ci-wind_c,2))
-                   * fabsf(their.elevation - my.elevation + 1)
+                   * fabsf(their.elevation / my.elevation)
                    * (*in)[ri][ci];
             total += LAND_MULT*(*in)[ri][ci];
             // total += AIR_MULT * in[ri][ci]->air_contaminant * my.elevation / their.elevation;
@@ -69,6 +71,9 @@ bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
             // else
             //     total += WATER_MULT * LAND_MULT * in[ri][ci]->water_contaminant * my.elevation / their.elevation;
         }
+    }
+    if(isinf(total)) {
+        exit(2);
     }
     (*out)[row][col] = total;
     return fabsf(total) < 0.01;
@@ -86,8 +91,10 @@ void print_grid(grid_t *a) {
     for(int r = 0; r < ROWS; r+=2) {
         for(int c = 0; c < COLS; c++) {
             printf("\033[38;2;%d;%d;%dm\033[48;2;%d;%d;%dm▀",
-                ((*a)[r][c]>255   || (*a)[r][c]<0)*255,   CLAMP((int)(*a)[r][c]*20,   0, 255), 0,
-                ((*a)[r+1][c]>255 || (*a)[r+1][c]<0)*255, CLAMP((int)(*a)[r+1][c]*20, 0, 255), 0
+                // ((*a)[r][c]>2550   || (*a)[r][c]<0)*255,   CLAMP((int)(*a)[r][c]/10,   0, 255), 0,
+                // ((*a)[r+1][c]>2550 || (*a)[r+1][c]<0)*255, CLAMP((int)(*a)[r+1][c]/10, 0, 255), 0
+                0, (int)CLAMP((*a)[r][c]/100,   0, 255), 0,
+                0, (int)CLAMP((*a)[r+1][c]/100, 0, 255), 0
             );
             // printf("%.2f\t", (*a)[r][c]);
         }
@@ -114,6 +121,15 @@ void print_map(map_t m) {
 int main(int argc, char** argv) {
     srand(time(0));
 
+    if(argc < 3) {
+        printf("USAGE: %s [AIR_MULT] [LAND_MULT] [GENERATIONS]\n", argv[0]);
+        return 1;
+    }
+
+    AIR_MULT = atof(argv[1]);
+    LAND_MULT = atof(argv[2]);
+    int GENERATIONS = atoi(argv[3]);
+
     grid_t a,b;
     for(int r = 0; r < ROWS; r++) {
         for(int c = 0; c < COLS; c++) {
@@ -134,25 +150,29 @@ int main(int argc, char** argv) {
             map.tiles[r][c] = (tile_t){
                 // .elevation = 1.25*cos(0.8*(float)r)+1.25*cos(0.3*(float)c),
                 .elevation = e,
-                .type = E_TILE_GROUND,
+                .type = e < 0.2?E_TILE_WATER:E_TILE_GROUND,
             };
         }
     }   
-    if(argc > 2) {
-        print_map(map);
-        return 0;
-    }
+    // if(argc > 2) {
+    //     print_map(map);
+    //     return 0;
+    // }
 
     a[ROWS/2][COLS/2] = 100.0;
 
     int gen = 0;
     bool done = 0;
-    while(!done) {
+    while(!done && (gen <= 0 || gen < GENERATIONS)) {
         map.wind.direction = 0.1;
         map.wind.speed     = 6.28/360 * 90;
         done = 1;
+        if(parity)
+            memcpy(b, a, sizeof(a[0][0])*GRID_SIZE);
+        else
+            memcpy(a, b, sizeof(a[0][0])*GRID_SIZE);
         #pragma omp parallel for num_threads(8)
-        for(int i = 0; i < 16384; i++) {
+        for(int i = 0; i < GRID_SIZE>>1; i++) {
             int pos = rand() % GRID_SIZE;
             if(parity){
                 done &= step_cell(&a, &b, I2RC(pos), &map);
@@ -161,9 +181,24 @@ int main(int argc, char** argv) {
             }
         }
 
-        usleep(15000);
+        #ifndef JSON_OUT
+        usleep(1500);
         print_grid(parity?&a:&b);
         printf("\033[KGeneration: %d\n", gen++);
+        #endif
+        gen++;
         parity = !parity;
     }
+
+    #ifdef JSON_OUT
+    printf("{\"generation\":%d,\"air\":%lf,\"land\":%lf,\"grid\":[", gen, AIR_MULT, LAND_MULT);
+    for(int r = 0; r < ROWS; r++) {
+        printf("[");
+        for(int c = 0; c < COLS; c++) {
+            printf("%lf%c", MIN(a[r][c], 100000000.0),c==COLS-1?']':',');
+        }
+        printf("%c",r==ROWS-1?']':',');
+    }
+    printf("}");
+    #endif
 }
