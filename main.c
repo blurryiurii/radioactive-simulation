@@ -8,7 +8,8 @@
 #define AIR_MULT   0.009
 // #define WATER_MULT 1.0
 #define LAND_MULT  0.002
-#define DECAY      0.85
+#define DECAY      0.86
+#define LAND_SLOPE_GAIN 6.0
 
 #define MIN(a,b) (a<b?a:b)
 #define MAX(a,b) (a>b?a:b)
@@ -61,7 +62,11 @@ bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
                    * sqrtf(powf(ri-wind_r,2)+powf(ci-wind_c,2))
                    * fabsf(their.elevation - my.elevation + 1)
                    * (*in)[ri][ci];
-            total += LAND_MULT*(*in)[ri][ci];
+
+            float slope = their.elevation - my.elevation; // >0 means their higher
+            float downhill = fmaxf(0.0f, slope); //boost when downhill only
+            float slope_weight = 1.0 * LAND_SLOPE_GAIN * downhill;
+            total += LAND_MULT * slope_weight * (*in)[ri][ci];
             // total += AIR_MULT * in[ri][ci]->air_contaminant * my.elevation / their.elevation;
             // total += LAND_MULT * in[ri][ci]->land_contaminant;
             // if(my.type == E_TILE_WATER && their.type == E_TILE_WATER)
