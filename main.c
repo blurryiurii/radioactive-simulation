@@ -8,7 +8,7 @@
 #define AIR_MULT   0.009
 // #define WATER_MULT 1.0
 #define LAND_MULT  0.002
-#define DECAY      0.8
+#define DECAY      0.85
 
 #define MIN(a,b) (a<b?a:b)
 #define MAX(a,b) (a>b?a:b)
@@ -51,8 +51,8 @@ typedef struct {
 
 bool step_cell(grid_t *in, grid_t *out, int row, int col, map_t *map) {
     tile_t my = map->tiles[row][col];
-    float wind_r = (float) row - asin(map->wind.direction)*map->wind.speed,
-          wind_c = (float) col - acos(map->wind.direction)*map->wind.speed;
+    float wind_r = (float) row - sinf(map->wind.direction)*map->wind.speed,
+          wind_c = (float) col - cosf(map->wind.direction)*map->wind.speed;
     float total = DECAY * (*in)[row][col];
     for(int ri = MAX(0,row-1); ri < MIN(ROWS, row+2); ri++) {
         for(int ci = MAX(0,col-1); ci < MIN(COLS, col+2); ci++) {
@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
     int gen = 0;
     bool done = 0;
     while(!done) {
-        map.wind.direction = 0.1;
+        map.wind.direction = 1.57;
         map.wind.speed     = 6.28/360 * 90;
         done = 1;
         #pragma omp parallel for num_threads(8)
